@@ -250,6 +250,7 @@ namespace SharpVectors.Renderers.Wpf
                 placement = null; // render it useless
             }
             string sBaselineShift    = _textElement.GetPropertyValue("baseline-shift").Trim();
+            //// NOTE:
             string alignmentBaseline = _textElement.GetPropertyValue("alignment-baseline").Trim();
 
             double shiftBy = 0;

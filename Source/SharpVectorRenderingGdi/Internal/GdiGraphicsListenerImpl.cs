@@ -173,6 +173,20 @@ namespace SharpVectors.Renderers.Gdi
             }
         }
 
+
+
+        public override void DrawString(string s, Font font, Brush brush, float srcX, float srcY, StringFormat format)
+        {
+            if (_graphics != null)
+            {
+                _graphics.DrawString(s, font, brush, srcX, srcY, format);
+            }
+        }
+
+
+
+
+
         #endregion
 
         #region Private Inner Classes

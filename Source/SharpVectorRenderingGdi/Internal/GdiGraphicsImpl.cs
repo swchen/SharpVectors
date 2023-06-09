@@ -41,7 +41,8 @@ namespace SharpVectors.Renderers.Gdi
         public override Matrix Transform
         {
             get { return _graphics.Transform; }
-            set {
+            set
+            {
                 if (_listenerGraphics != null)
                     _listenerGraphics.Transform = value;
 
@@ -51,14 +52,16 @@ namespace SharpVectors.Renderers.Gdi
 
         public override GdiHitTestHelper HitTestHelper
         {
-            get {
+            get
+            {
                 if (_listenerGraphics != null)
                 {
                     return _listenerGraphics.HitTestHelper;
                 }
                 return GdiHitTestHelper.NoHit;
             }
-            set {
+            set
+            {
                 if (_listenerGraphics != null)
                 {
                     _listenerGraphics.HitTestHelper = value;
@@ -200,11 +203,28 @@ namespace SharpVectors.Renderers.Gdi
         {
             if (_listenerGraphics != null)
             {
-                _listenerGraphics.DrawImage(grNode, image, destRect, srcX, srcY, srcWidth, 
+                _listenerGraphics.DrawImage(grNode, image, destRect, srcX, srcY, srcWidth,
                     srcHeight, graphicsUnit, imageAttributes);
             }
             _graphics.DrawImage(image, destRect, srcX, srcY, srcWidth, srcHeight, graphicsUnit, imageAttributes);
         }
+
+
+
+        public override void DrawString(string s, Font font, Brush brush, float srcX, float srcY, StringFormat format)
+        {
+
+            if (_listenerGraphics != null)
+            {
+                _listenerGraphics.DrawString(s, font, brush, srcX, srcY, format);
+            }
+
+            _graphics.DrawString(s, font, brush, srcX, srcY, format);
+        }
+
+
+
+
 
         #endregion
 
@@ -249,7 +269,7 @@ namespace SharpVectors.Renderers.Gdi
             public GdiGraphicsContainerImpl(GraphicsContainer container, GdiGraphicsContainer listener)
             {
                 this.Container = container;
-                this.Listener  = listener;
+                this.Listener = listener;
             }
         }
 

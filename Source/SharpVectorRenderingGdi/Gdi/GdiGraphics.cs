@@ -135,6 +135,9 @@ namespace SharpVectors.Renderers.Gdi
         public abstract void TranslateClip(float x, float y);
         public abstract void TranslateTransform(float dx, float dy);
 
+
+        public abstract void DrawString(string s, Font font, Brush brush, float srcX, float srcY, StringFormat format);
+
         #endregion
 
         #region IDisposable Members

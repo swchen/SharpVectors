@@ -218,6 +218,19 @@ namespace SharpVectors.Renderers.Gdi
             _graphics.DrawImage(image, destRect, srcX, srcY, srcWidth, srcHeight, graphicsUnit, imageAttributes);
         }
 
+
+
+        public override void DrawString(string s, Font font, Brush brush, float srcX, float srcY, StringFormat format)
+        {
+
+            if (_idMapGraphics != null) _idMapGraphics.DrawString(s, font, brush, srcX, srcY, format);
+            _graphics.DrawString(s, font, brush, srcX, srcY, format);
+        }
+
+
+
+
+
         #endregion
 
         #region IDisposable Members

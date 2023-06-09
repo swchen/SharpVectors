@@ -1,13 +1,12 @@
 ﻿using System;
-using System.Xml;
-using System.Linq;
-using System.Threading;
-using System.Diagnostics;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Text.RegularExpressions;
-
+using System.Threading;
+using System.Xml;
 using SharpVectors.Dom;
 using SharpVectors.Dom.Svg;
 
@@ -22,28 +21,6 @@ namespace SharpVectors.Renderers.Gdi
 
     public sealed class GdiTextRendering : GdiRendering
     {
-        #region Private Constants
-
-        private const string Whitespace = " ";
-
-        private readonly static Regex _tabNewline = new Regex(@"[\n\f\t]", RegexOptions.Compiled);
-        private readonly static Regex _decimalNumber = new Regex(@"^\d", RegexOptions.Compiled);
-        private static readonly Regex _multipleSpaces = new Regex(@" {2,}", RegexOptions.Compiled);
-
-        private static readonly Regex _regExCaps = new Regex(@"(?<=[A-Z])(?=[A-Z][a-z]) |
-                 (?<=[^A-Z])(?=[A-Z]) | (?<=[A-Za-z])(?=[^A-Za-z])", RegexOptions.IgnorePatternWhitespace);
-
-        #endregion
-
-        #region Private Fields
-
-        private string _actualFontName;
-        private GraphicsPath _graphicsPath;
-        private GdiTextMode _textMode;
-        private GdiGraphics _graphics;
-
-        #endregion
-
         #region Constructor and Destructor
 
         public GdiTextRendering(SvgElement element)
@@ -54,38 +31,44 @@ namespace SharpVectors.Renderers.Gdi
 
         #endregion
 
+        #region Private Constants
+
+        private const string Whitespace = " ";
+
+        private static readonly Regex _tabNewline = new Regex(@"[\n\f\t]", RegexOptions.Compiled);
+        private static readonly Regex _decimalNumber = new Regex(@"^\d", RegexOptions.Compiled);
+        private static readonly Regex _multipleSpaces = new Regex(@" {2,}", RegexOptions.Compiled);
+
+        private static readonly Regex _regExCaps = new Regex(@"(?<=[A-Z])(?=[A-Z][a-z]) |
+                 (?<=[^A-Z])(?=[A-Z]) | (?<=[A-Za-z])(?=[^A-Za-z])", RegexOptions.IgnorePatternWhitespace);
+
+        #endregion
+
+        #region Private Fields
+
+        private string _actualFontName;
+        private GdiTextMode _textMode;
+        private GdiGraphics _graphics;
+
+        #endregion
+
         #region Public Properties
 
-        public override bool IsRecursive
-        {
-            get {
-                return true;
-            }
-        }
+        public override bool IsRecursive => true;
 
         public GdiTextMode TextMode
         {
-            get {
-                return _textMode;
-            }
-            set {
+            get => _textMode;
+            set
+            {
                 _textMode = value;
                 if (_textMode == GdiTextMode.Outlining)
-                {
-                    if (_graphicsPath == null)
-                    {
-                        _graphicsPath = new GraphicsPath();
-                    }
-                }
+                    if (Path == null)
+                        Path = new GraphicsPath();
             }
         }
 
-        public GraphicsPath Path
-        {
-            get {
-                return _graphicsPath;
-            }
-        }
+        public GraphicsPath Path { get; private set; }
 
         #endregion
 
@@ -94,9 +77,7 @@ namespace SharpVectors.Renderers.Gdi
         public override void BeforeRender(GdiGraphicsRenderer renderer)
         {
             if (_uniqueColor.IsEmpty && _textMode != GdiTextMode.Outlining)
-            {
                 _uniqueColor = renderer.GetNextHitColor(_svgElement);
-            }
 
             var graphics = renderer.GdiGraphics;
 
@@ -119,79 +100,57 @@ namespace SharpVectors.Renderers.Gdi
             //    return;
             //}
 
-            SvgTextBaseElement textElement = _svgElement as SvgTextBaseElement;
-            if (textElement == null)
-            {
-                return;
-            }
+            var textElement = _svgElement as SvgTextBaseElement;
+            if (textElement == null) return;
             var comparer = StringComparison.OrdinalIgnoreCase;
 
-            string sVisibility = textElement.GetPropertyValue(CssConstants.PropVisibility);
-            string sDisplay    = textElement.GetPropertyValue(CssConstants.PropDisplay);
-            if (string.Equals(sVisibility, CssConstants.ValHidden, comparer) 
+            var sVisibility = textElement.GetPropertyValue(CssConstants.PropVisibility);
+            var sDisplay = textElement.GetPropertyValue(CssConstants.PropDisplay);
+            if (string.Equals(sVisibility, CssConstants.ValHidden, comparer)
                 || string.Equals(sDisplay, CssConstants.ValNone, comparer))
-            {
                 return;
-            }
 
-            if (_textMode != GdiTextMode.Outlining)
-            {
-                SetClip(_graphics);
-            }
+            if (_textMode != GdiTextMode.Outlining) SetClip(_graphics);
 
-            PointF ctp = new PointF(0, 0); // current text position
+            var ctp = new PointF(0, 0); // current text position
 
             ctp = GetCurrentTextPosition(textElement, ctp);
-            string sBaselineShift = textElement.GetPropertyValue("baseline-shift").Trim();
+            var sBaselineShift = textElement.GetPropertyValue("baseline-shift").Trim();
             double shiftBy = 0;
 
             if (sBaselineShift.Length > 0)
             {
-                float textFontSize = GetComputedFontSize(textElement);
+                var textFontSize = GetComputedFontSize(textElement);
                 if (sBaselineShift.EndsWith("%", comparer))
-                {
                     shiftBy = SvgNumber.ParseNumber(sBaselineShift.Substring(0,
                         sBaselineShift.Length - 1)) / 100 * textFontSize;
-                }
                 else if (sBaselineShift == "sub")
-                {
                     shiftBy = -0.6F * textFontSize;
-                }
                 else if (sBaselineShift == "super")
-                {
                     shiftBy = 0.6F * textFontSize;
-                }
                 else if (sBaselineShift == CssConstants.ValBaseline)
-                {
                     shiftBy = 0;
-                }
                 else
-                {
                     shiftBy = SvgNumber.ParseNumber(sBaselineShift);
-                }
             }
 
             // For for fonts loading in the background...
             var svgDoc = _svgElement.OwnerDocument;
             if (svgDoc.IsFontsLoaded == false)
-            {
                 //TODO: Use of SpinUntil is known to CPU heavy, but will work for now...
-                SpinWait.SpinUntil(() => svgDoc.IsFontsLoaded == true);
-            }
+                SpinWait.SpinUntil(() => svgDoc.IsFontsLoaded);
 
-            XmlNodeType nodeType = XmlNodeType.None;
+            var nodeType = XmlNodeType.None;
             foreach (XmlNode child in _svgElement.ChildNodes)
             {
-                SvgStyleableElement stylable = child as SvgStyleableElement;
+                var stylable = child as SvgStyleableElement;
                 if (stylable != null)
                 {
                     sVisibility = stylable.GetPropertyValue(CssConstants.PropVisibility);
                     sDisplay = stylable.GetPropertyValue(CssConstants.PropDisplay);
-                    if (string.Equals(sVisibility, CssConstants.ValHidden, comparer) 
+                    if (string.Equals(sVisibility, CssConstants.ValHidden, comparer)
                         || string.Equals(sDisplay, CssConstants.ValNone, comparer))
-                    {
                         continue;
-                    }
                 }
 
                 nodeType = child.NodeType;
@@ -203,15 +162,11 @@ namespace SharpVectors.Renderers.Gdi
                 }
                 else if (nodeType == XmlNodeType.Element)
                 {
-                    string nodeName = child.Name;
+                    var nodeName = child.Name;
                     if (string.Equals(nodeName, "tref", comparer))
-                    {
                         AddTRefElementPath((SvgTRefElement)child, ref ctp);
-                    }
                     else if (string.Equals(nodeName, "tspan", comparer))
-                    {
                         AddTSpanElementPath((SvgTSpanElement)child, ref ctp);
-                    }
                 }
             }
 
@@ -226,13 +181,13 @@ namespace SharpVectors.Renderers.Gdi
 
         private Brush GetBrush(GraphicsPath gp)
         {
-            GdiSvgPaint paint = new GdiSvgPaint(_svgElement as SvgStyleableElement, "fill");
+            var paint = new GdiSvgPaint(_svgElement as SvgStyleableElement, "fill");
             return paint.GetBrush(gp);
         }
 
         private Pen GetPen(GraphicsPath gp)
         {
-            GdiSvgPaint paint = new GdiSvgPaint(_svgElement as SvgStyleableElement, "stroke");
+            var paint = new GdiSvgPaint(_svgElement as SvgStyleableElement, "stroke");
             return paint.GetPen(gp);
         }
 
@@ -245,15 +200,9 @@ namespace SharpVectors.Renderers.Gdi
             val = _tabNewline.Replace(val, " ");
 
             //if (element.XmlSpace == "preserve" || element.XmlSpace == "default")
-            if (element.XmlSpace == "preserve")
-            {
-                return val;
-            }
-            if (element.XmlSpace == "default")
-            {
-                return _multipleSpaces.Replace(val, " ");
-                //return val;
-            }
+            if (element.XmlSpace == "preserve") return val;
+            if (element.XmlSpace == "default") return _multipleSpaces.Replace(val, " ");
+            //return val;
             return val.Trim();
         }
 
@@ -264,101 +213,157 @@ namespace SharpVectors.Renderers.Gdi
 
         private void AddGraphicsPath(SvgTextContentElement element, ref PointF ctp, string text)
         {
+            //if (text.Length == 0)
+            //    return;
+
+            //float emSize = GetComputedFontSize(element);
+            //FontFamily family = GetFontFamily(element);
+            //int style = GetFontStyle(element);
+            //StringFormat sf = GetStringFormat(element);
+
+            //GraphicsPath textGeometry = new GraphicsPath();
+
+            //float xCorrection = 0;
+            //if (sf.Alignment == StringAlignment.Near)
+            //    xCorrection = emSize * 1 / 6;
+            //else if (sf.Alignment == StringAlignment.Far)
+            //    xCorrection = -emSize * 1 / 6;
+
+            //float yCorrection = (float)(family.GetCellAscent(FontStyle.Regular)) / (float)(family.GetEmHeight(FontStyle.Regular)) * emSize;
+
+            //// TODO: font property
+            //PointF p = new PointF(ctp.X - xCorrection, ctp.Y - yCorrection);
+
+            //textGeometry.AddString(text, family, style, emSize, p, sf);
+            //if (!textGeometry.GetBounds().IsEmpty)
+            //{
+            //    float bboxWidth = textGeometry.GetBounds().Width;
+            //    if (sf.Alignment == StringAlignment.Center)
+            //        bboxWidth /= 2;
+            //    else if (sf.Alignment == StringAlignment.Far)
+            //        bboxWidth = 0;
+
+            //    ctp.X += bboxWidth + emSize / 4;
+            //}
+
+            //if (_textMode == GdiTextMode.Outlining)
+            //{
+            //    _graphicsPath.AddPath(textGeometry, false);
+            //    return;
+            //}
+
+            //GdiSvgPaint fillPaint = new GdiSvgPaint(element, "fill");
+            //Brush brush = fillPaint.GetBrush(textGeometry);
+
+            //GdiSvgPaint strokePaint = new GdiSvgPaint(element, "stroke");
+            //Pen pen = strokePaint.GetPen(textGeometry);
+
+            //if (brush != null)
+            //{
+            //    if (brush is PathGradientBrush)
+            //    {
+            //        var gps = fillPaint.PaintFill as GdiRadialGradientFill;
+
+            //        _graphics.SetClip(gps.GetRadialRegion(textGeometry.GetBounds()), CombineMode.Exclude);
+
+            //        SolidBrush tempBrush = new SolidBrush(((PathGradientBrush)brush).InterpolationColors.Colors[0]);
+            //        _graphics.FillPath(this, tempBrush, textGeometry);
+            //        tempBrush.Dispose();
+            //        _graphics.ResetClip();
+            //    }
+
+            //    _graphics.FillPath(this, brush, textGeometry);
+            //    brush.Dispose();
+            //}
+
+            //if (pen != null)
+            //{
+            //    if (pen.Brush is PathGradientBrush)
+            //    {
+            //        var gps = strokePaint.PaintFill as GdiRadialGradientFill;
+            //        GdiGraphicsContainer container = _graphics.BeginContainer();
+
+            //        _graphics.SetClip(gps.GetRadialRegion(textGeometry.GetBounds()), CombineMode.Exclude);
+
+            //        SolidBrush tempBrush = new SolidBrush(((PathGradientBrush)pen.Brush).InterpolationColors.Colors[0]);
+            //        Pen tempPen = new Pen(tempBrush, pen.Width);
+            //        _graphics.DrawPath(this, tempPen, textGeometry);
+            //        tempPen.Dispose();
+            //        tempBrush.Dispose();
+
+            //        _graphics.EndContainer(container);
+            //    }
+
+            //    _graphics.DrawPath(this, pen, textGeometry);
+            //    pen.Dispose();
+            //}
+
+            //textGeometry.Dispose();
+
+
+            //--------------------------------------------------------------------------
+
+
             if (text.Length == 0)
                 return;
 
-            float emSize      = GetComputedFontSize(element);
-            FontFamily family = GetFontFamily(element);
-            int style         = GetFontStyle(element);
-            StringFormat sf   = GetStringFormat(element);
 
-            GraphicsPath textGeometry = new GraphicsPath();
+            var emSize = GetComputedFontSize(element);
+            var family = GetFontFamily(element);
+            var style = GetFontStyle(element);
+            var sf = GetStringFormat(element);
 
-            float xCorrection = 0;
-            if (sf.Alignment == StringAlignment.Near)
-                xCorrection = emSize * 1 / 6;
-            else if (sf.Alignment == StringAlignment.Far)
-                xCorrection = -emSize * 1 / 6;
+            // NOTE: <text> 的 x, y 与 文字的 baseline 对齐
+            // 水平方向支持 text-anchor 属性
+            // TODO: 垂直方向 不支持 alignment-baseline, dominant-baseline 属性
+            var yCorrection = family.GetCellAscent(FontStyle.Regular) / (float)family.GetEmHeight(FontStyle.Regular) * emSize;
 
-            float yCorrection = (float)(family.GetCellAscent(FontStyle.Regular)) / (float)(family.GetEmHeight(FontStyle.Regular)) * emSize;
 
-            // TODO: font property
-            PointF p = new PointF(ctp.X - xCorrection, ctp.Y - yCorrection);
 
-            textGeometry.AddString(text, family, style, emSize, p, sf);
-            if (!textGeometry.GetBounds().IsEmpty)
+            using (GraphicsPath textGeometry = new GraphicsPath())
             {
-                float bboxWidth = textGeometry.GetBounds().Width;
-                if (sf.Alignment == StringAlignment.Center)
-                    bboxWidth /= 2;
-                else if (sf.Alignment == StringAlignment.Far)
-                    bboxWidth = 0;
 
-                ctp.X += bboxWidth + emSize / 4;
-            }
-
-            if (_textMode == GdiTextMode.Outlining)
-            {
-                _graphicsPath.AddPath(textGeometry, false);
-                return;
-            }
-
-            GdiSvgPaint fillPaint = new GdiSvgPaint(element, "fill");
-            Brush brush = fillPaint.GetBrush(textGeometry);
-
-            GdiSvgPaint strokePaint = new GdiSvgPaint(element, "stroke");
-            Pen pen = strokePaint.GetPen(textGeometry);
-
-            if (brush != null)
-            {
-                if (brush is PathGradientBrush)
+                if (_textMode == GdiTextMode.Outlining)
                 {
-                    var gps = fillPaint.PaintFill as GdiRadialGradientFill;
-
-                    _graphics.SetClip(gps.GetRadialRegion(textGeometry.GetBounds()), CombineMode.Exclude);
-
-                    SolidBrush tempBrush = new SolidBrush(((PathGradientBrush)brush).InterpolationColors.Colors[0]);
-                    _graphics.FillPath(this, tempBrush, textGeometry);
-                    tempBrush.Dispose();
-                    _graphics.ResetClip();
+                    Path.AddPath(textGeometry, false);
+                    return;
                 }
 
-                _graphics.FillPath(this, brush, textGeometry);
-                brush.Dispose();
-            }
 
-            if (pen != null)
-            {
-                if (pen.Brush is PathGradientBrush)
+                var fillPaint = new GdiSvgPaint(element, "fill");
+                var brush = fillPaint.GetBrush(textGeometry);
+
+                //var strokePaint = new GdiSvgPaint(element, "stroke");
+                //var pen = strokePaint.GetPen(textGeometry);
+
+
+                if (brush != null)
                 {
-                    var gps = strokePaint.PaintFill as GdiRadialGradientFill;
-                    GdiGraphicsContainer container = _graphics.BeginContainer();
-
-                    _graphics.SetClip(gps.GetRadialRegion(textGeometry.GetBounds()), CombineMode.Exclude);
-
-                    SolidBrush tempBrush = new SolidBrush(((PathGradientBrush)pen.Brush).InterpolationColors.Colors[0]);
-                    Pen tempPen = new Pen(tempBrush, pen.Width);
-                    _graphics.DrawPath(this, tempPen, textGeometry);
-                    tempPen.Dispose();
-                    tempBrush.Dispose();
-
-                    _graphics.EndContainer(container);
+                    _graphics.DrawString(
+                        text,
+                        new Font(family, emSize, (FontStyle)style, GraphicsUnit.Pixel),
+                        brush,
+                        ctp.X,
+                        ctp.Y - yCorrection,
+                        sf
+                    );
                 }
-
-                _graphics.DrawPath(this, pen, textGeometry);
-                pen.Dispose();
+                //else if (pen != null)
+                //    _graphics.DrawString(
+                //        text,
+                //        new Font(family, emSize, (FontStyle) style, GraphicsUnit.Pixel),
+                //        pen.Brush,
+                //        ctp.X,
+                //        ctp.Y - yCorrection,
+                //        sf
+                //    );
             }
-
-            textGeometry.Dispose();
         }
 
         private string GetTRefText(SvgTRefElement element)
         {
-            XmlElement refElement = element.ReferencedElement;
-            if (refElement != null)
-            {
-                return TrimText(element, refElement.InnerText);
-            }
+            var refElement = element.ReferencedElement;
+            if (refElement != null) return TrimText(element, refElement.InnerText);
             return string.Empty;
         }
 
@@ -366,73 +371,49 @@ namespace SharpVectors.Renderers.Gdi
         {
             ctp = GetCurrentTextPosition(element, ctp);
 
-            this.AddGraphicsPath(element, ref ctp, GetTRefText(element));
+            AddGraphicsPath(element, ref ctp, GetTRefText(element));
         }
 
         private void AddTSpanElementPath(SvgTSpanElement element, ref PointF ctp)
         {
             ctp = GetCurrentTextPosition(element, ctp);
-            string sBaselineShift = element.GetPropertyValue("baseline-shift").Trim();
+            var sBaselineShift = element.GetPropertyValue("baseline-shift").Trim();
             double shiftBy = 0;
 
             if (sBaselineShift.Length > 0)
             {
-                SvgTextBaseElement textElement = (SvgTextBaseElement)element.SelectSingleNode("ancestor::svg:text",
+                var textElement = (SvgTextBaseElement)element.SelectSingleNode("ancestor::svg:text",
                     element.OwnerDocument.NamespaceManager);
 
-                float textFontSize = GetComputedFontSize(textElement);
+                var textFontSize = GetComputedFontSize(textElement);
                 if (sBaselineShift.EndsWith("%", StringComparison.OrdinalIgnoreCase))
-                {
                     shiftBy = SvgNumber.ParseNumber(sBaselineShift.Substring(0,
                         sBaselineShift.Length - 1)) / 100 * textFontSize;
-                }
                 else if (sBaselineShift == "sub")
-                {
                     shiftBy = -0.6F * textFontSize;
-                }
                 else if (sBaselineShift == "super")
-                {
                     shiftBy = 0.6F * textFontSize;
-                }
                 else if (sBaselineShift == CssConstants.ValBaseline)
-                {
                     shiftBy = 0;
-                }
                 else
-                {
                     shiftBy = SvgNumber.ParseNumber(sBaselineShift);
-                }
             }
 
             foreach (XmlNode child in element.ChildNodes)
-            {
                 if (child.NodeType == XmlNodeType.Text)
                 {
                     ctp.Y -= (float)shiftBy;
                     AddGraphicsPath(element, ref ctp, GetText(element, child));
                     ctp.Y += (float)shiftBy;
                 }
-            }
         }
 
         private PointF GetCurrentTextPosition(SvgTextPositioningElement posElement, PointF p)
         {
-            if (posElement.X.AnimVal.NumberOfItems > 0)
-            {
-                p.X = (float)posElement.X.AnimVal.GetItem(0).Value;
-            }
-            if (posElement.Y.AnimVal.NumberOfItems > 0)
-            {
-                p.Y = (float)posElement.Y.AnimVal.GetItem(0).Value;
-            }
-            if (posElement.Dx.AnimVal.NumberOfItems > 0)
-            {
-                p.X += (float)posElement.Dx.AnimVal.GetItem(0).Value;
-            }
-            if (posElement.Dy.AnimVal.NumberOfItems > 0)
-            {
-                p.Y += (float)posElement.Dy.AnimVal.GetItem(0).Value;
-            }
+            if (posElement.X.AnimVal.NumberOfItems > 0) p.X = (float)posElement.X.AnimVal.GetItem(0).Value;
+            if (posElement.Y.AnimVal.NumberOfItems > 0) p.Y = (float)posElement.Y.AnimVal.GetItem(0).Value;
+            if (posElement.Dx.AnimVal.NumberOfItems > 0) p.X += (float)posElement.Dx.AnimVal.GetItem(0).Value;
+            if (posElement.Dy.AnimVal.NumberOfItems > 0) p.Y += (float)posElement.Dy.AnimVal.GetItem(0).Value;
             return p;
         }
 
@@ -440,27 +421,18 @@ namespace SharpVectors.Renderers.Gdi
         {
             var comparer = StringComparison.OrdinalIgnoreCase;
 
-            int style = (int)FontStyle.Regular;
-            string fontWeight = element.GetPropertyValue("font-weight");
-            if (fontWeight == "bold" || fontWeight == "bolder" || fontWeight == "600" || fontWeight == "700" || fontWeight == "800" || fontWeight == "900")
-            {
-                style = style | (int)FontStyle.Bold;
-            }
+            var style = (int)FontStyle.Regular;
+            var fontWeight = element.GetPropertyValue("font-weight");
+            if (fontWeight == "bold" || fontWeight == "bolder" || fontWeight == "600" || fontWeight == "700" ||
+                fontWeight == "800" || fontWeight == "900") style = style | (int)FontStyle.Bold;
 
             if (string.Equals(element.GetPropertyValue("font-style"), "italic", comparer))
-            {
                 style = style | (int)FontStyle.Italic;
-            }
 
-            string textDeco = element.GetPropertyValue("text-decoration");
+            var textDeco = element.GetPropertyValue("text-decoration");
             if (string.Equals(textDeco, "line-through", comparer))
-            {
                 style = style | (int)FontStyle.Strikeout;
-            }
-            else if (string.Equals(textDeco, "underline", comparer))
-            {
-                style = style | (int)FontStyle.Underline;
-            }
+            else if (string.Equals(textDeco, "underline", comparer)) style = style | (int)FontStyle.Underline;
             return style;
         }
 
@@ -502,26 +474,25 @@ namespace SharpVectors.Renderers.Gdi
 
         private FontFamily GetFontFamily(SvgTextContentElement element)
         {
-            string fontFamily  = element.GetPropertyValue("font-family");
-            string[] fontNames = fontFamily.Split(new char[1] { ',' });
+            var fontFamily = element.GetPropertyValue("font-family");
+            var fontNames = fontFamily.Split(',');
 
             var systemFontFamilies = FontFamily.Families;
             FontFamily family;
 
             var comparer = StringComparison.OrdinalIgnoreCase;
 
-            foreach (string fn in fontNames)
-            {
+            foreach (var fn in fontNames)
                 try
                 {
-                    string fontName = fn.Trim(new char[] { ' ', '\'', '"' });
+                    var fontName = fn.Trim(' ', '\'', '"');
 
                     if (string.Equals(fontName, "serif", comparer))
                     {
                         family = GdiRenderingSettings.GenericSerif;
                     }
                     else if (string.Equals(fontName, "sans-serif", comparer)
-                        || string.Equals(fontName, "sans serif", comparer))
+                             || string.Equals(fontName, "sans serif", comparer))
                     {
                         family = GdiRenderingSettings.GenericSansSerif;
                     }
@@ -534,16 +505,13 @@ namespace SharpVectors.Renderers.Gdi
                         var funcFamily = new Func<FontFamily, bool>(ff => string.Equals(ff.Name, fontName, comparer));
                         family = systemFontFamilies.FirstOrDefault(funcFamily);
                     }
-                    if (family != null)
-                    {
-                        return family;
-                    }
+
+                    if (family != null) return family;
                 }
                 catch (Exception ex)
                 {
                     Trace.TraceError(ex.ToString());
                 }
-            }
 
             // No known font-family was found => default to "Arial"
             return GdiRenderingSettings.DefaultFontFamily;
@@ -553,38 +521,34 @@ namespace SharpVectors.Renderers.Gdi
         {
             _actualFontName = null;
 
-            string fontFamily = element.GetPropertyValue("font-family");
-            string[] fontNames = fontNames = fontFamily.Split(new char[1] { ',' });
+            var fontFamily = element.GetPropertyValue("font-family");
+            string[] fontNames = fontNames = fontFamily.Split(',');
 
-            GdiFontStyles fontStyle = GetTextFontStyle(element);
-            GdiFontWeights fontWeight = GetTextFontWeight(element);
-            GdiFontStretches fontStretch = GetTextFontStretch(element);
+            var fontStyle = GetTextFontStyle(element);
+            var fontWeight = GetTextFontWeight(element);
+            var fontStretch = GetTextFontStretch(element);
 
             var comparer = StringComparison.OrdinalIgnoreCase;
 
             var docElement = element.OwnerDocument;
 
-            ISet<string> svgFontFamilies = docElement.SvgFontFamilies;
-            IDictionary<string, string> styledFontIds = docElement.StyledFontIds;
+            var svgFontFamilies = docElement.SvgFontFamilies;
+            var styledFontIds = docElement.StyledFontIds;
 
             IList<string> svgFontNames = null;
-            if (svgFontFamilies != null && svgFontFamilies.Count != 0)
-            {
-                svgFontNames = new List<string>();
-            }
+            if (svgFontFamilies != null && svgFontFamilies.Count != 0) svgFontNames = new List<string>();
             var systemFontFamilies = FontFamily.Families;
 
             FontFamily family = null;
             // using separate pointer to give less priority to generic font names
             FontFamily genericFamily = null;
 
-            GdiFontFamilyType familyType = GdiFontFamilyType.None;
+            var familyType = GdiFontFamilyType.None;
 
-            foreach (string fn in fontNames)
-            {
+            foreach (var fn in fontNames)
                 try
                 {
-                    string fontName = fn.Trim(new char[] { ' ', '\'', '"' });
+                    var fontName = fn.Trim(' ', '\'', '"');
                     if (svgFontFamilies != null && svgFontFamilies.Count != 0)
                     {
                         if (svgFontFamilies.Contains(fontName))
@@ -592,9 +556,10 @@ namespace SharpVectors.Renderers.Gdi
                             svgFontNames.Add(fontName);
                             continue;
                         }
+
                         if (styledFontIds.ContainsKey(fontName))
                         {
-                            string mappedFontName = styledFontIds[fontName];
+                            var mappedFontName = styledFontIds[fontName];
                             if (svgFontFamilies.Contains(mappedFontName))
                             {
                                 svgFontNames.Add(mappedFontName);
@@ -608,7 +573,7 @@ namespace SharpVectors.Renderers.Gdi
                         genericFamily = GdiRenderingSettings.GenericSerif;
                     }
                     else if (string.Equals(fontName, "sans-serif", comparer)
-                        || string.Equals(fontName, "sans serif", comparer))
+                             || string.Equals(fontName, "sans serif", comparer))
                     {
                         genericFamily = GdiRenderingSettings.GenericSansSerif;
                     }
@@ -618,8 +583,9 @@ namespace SharpVectors.Renderers.Gdi
                     }
                     else if (styledFontIds.ContainsKey(fontName))
                     {
-                        string mappedFontName = styledFontIds[fontName];
-                        var funcFamily = new Func<FontFamily, bool>(ff => string.Equals(ff.Name, mappedFontName, comparer));
+                        var mappedFontName = styledFontIds[fontName];
+                        var funcFamily =
+                            new Func<FontFamily, bool>(ff => string.Equals(ff.Name, mappedFontName, comparer));
                         family = systemFontFamilies.FirstOrDefault(funcFamily);
                         if (family != null)
                         {
@@ -640,8 +606,8 @@ namespace SharpVectors.Renderers.Gdi
                         else if (fontName.IndexOf('-') > 0)
                         {
                             normalizedFontName = fontName.Replace("-", " ");
-                            funcFamily = new Func<FontFamily, bool>(ff => string.Equals(ff.Name,
-                                normalizedFontName, comparer));
+                            funcFamily = ff => string.Equals(ff.Name,
+                                normalizedFontName, comparer);
                             family = systemFontFamilies.FirstOrDefault(funcFamily);
                             if (family != null)
                             {
@@ -651,8 +617,8 @@ namespace SharpVectors.Renderers.Gdi
                         }
                         else if (SplitByCaps(fontName, out normalizedFontName))
                         {
-                            funcFamily = new Func<FontFamily, bool>(ff => string.Equals(ff.Name,
-                               normalizedFontName, comparer));
+                            funcFamily = ff => string.Equals(ff.Name,
+                                normalizedFontName, comparer);
                             family = systemFontFamilies.FirstOrDefault(funcFamily);
                             if (family != null)
                             {
@@ -663,16 +629,13 @@ namespace SharpVectors.Renderers.Gdi
                     }
 
                     if (family != null)
-                    {
                         return new GdiFontFamilyInfo(familyType, _actualFontName, family,
                             fontWeight, fontStyle, fontStretch);
-                    }
                 }
                 catch (Exception ex)
                 {
                     Trace.TraceError(ex.ToString());
                 }
-            }
 
             //// If set, use the SVG-Font...Not Ready Yet!!!
             //if (svgFontNames != null && svgFontNames.Count != 0)
@@ -732,10 +695,8 @@ namespace SharpVectors.Renderers.Gdi
             //}
 
             if (genericFamily != null)
-            {
                 return new GdiFontFamilyInfo(GdiFontFamilyType.Generic, _actualFontName, genericFamily,
                     fontWeight, fontStyle, fontStretch);
-            }
 
             // No known font-family was found => default to "Arial"
             return new GdiFontFamilyInfo(familyType, _actualFontName,
@@ -746,25 +707,26 @@ namespace SharpVectors.Renderers.Gdi
         {
             var comparer = StringComparison.OrdinalIgnoreCase;
 
-            StringFormat sf = new StringFormat();
+            var sf = new StringFormat();
 
-            bool doAlign = true;
+            var doAlign = true;
             if (element is SvgTSpanElement || element is SvgTRefElement)
             {
-                SvgTextPositioningElement posElement = (SvgTextPositioningElement)element;
+                var posElement = (SvgTextPositioningElement)element;
                 if (posElement.X.AnimVal.NumberOfItems == 0) doAlign = false;
             }
 
             if (doAlign)
             {
-                string anchor = element.GetPropertyValue("text-anchor");
+                //// NOTE: text-anchor 转成 StringAlignment
+                var anchor = element.GetPropertyValue("text-anchor");
                 if (string.Equals(anchor, "middle", comparer))
                     sf.Alignment = StringAlignment.Center;
                 if (string.Equals(anchor, "end", comparer))
                     sf.Alignment = StringAlignment.Far;
             }
 
-            string dir = element.GetPropertyValue("direction");
+            var dir = element.GetPropertyValue("direction");
             if (string.Equals(dir, "rtl", comparer))
             {
                 if (sf.Alignment == StringAlignment.Far)
@@ -776,9 +738,7 @@ namespace SharpVectors.Renderers.Gdi
 
             dir = element.GetPropertyValue("writing-mode");
             if (string.Equals(dir, "tb", comparer))
-            {
                 sf.FormatFlags = sf.FormatFlags | StringFormatFlags.DirectionVertical;
-            }
 
             sf.FormatFlags = sf.FormatFlags | StringFormatFlags.MeasureTrailingSpaces;
 
@@ -787,7 +747,7 @@ namespace SharpVectors.Renderers.Gdi
 
         private float GetComputedFontSize(SvgTextContentElement element)
         {
-            string str = element.GetPropertyValue("font-size");
+            var str = element.GetPropertyValue("font-size");
             float fontSize = 12;
             if (_decimalNumber.IsMatch(str))
             {
@@ -802,10 +762,7 @@ namespace SharpVectors.Renderers.Gdi
         private static bool SplitByCaps(string input, out string output)
         {
             output = input;
-            if (string.IsNullOrWhiteSpace(input))
-            {
-                return false;
-            }
+            if (string.IsNullOrWhiteSpace(input)) return false;
 
             output = _regExCaps.Replace(input, " ");
 
@@ -818,11 +775,8 @@ namespace SharpVectors.Renderers.Gdi
 
         private GdiFontWeights GetTextFontWeight(SvgTextContentElement element)
         {
-            string fontWeight = element.GetPropertyValue("font-weight");
-            if (string.IsNullOrWhiteSpace(fontWeight))
-            {
-                return GdiFontWeights.Normal;
-            }
+            var fontWeight = element.GetPropertyValue("font-weight");
+            if (string.IsNullOrWhiteSpace(fontWeight)) return GdiFontWeights.Normal;
 
             switch (fontWeight)
             {
@@ -854,28 +808,25 @@ namespace SharpVectors.Renderers.Gdi
 
             if (string.Equals(fontWeight, "bolder", StringComparison.OrdinalIgnoreCase))
             {
-                SvgTransformableElement parentElement = element.ParentNode as SvgTransformableElement;
+                var parentElement = element.ParentNode as SvgTransformableElement;
                 if (parentElement != null)
                 {
                     fontWeight = parentElement.GetPropertyValue("font-weight");
-                    if (!string.IsNullOrWhiteSpace(fontWeight))
-                    {
-                        return this.GetBolderFontWeight(fontWeight);
-                    }
+                    if (!string.IsNullOrWhiteSpace(fontWeight)) return GetBolderFontWeight(fontWeight);
                 }
+
                 return GdiFontWeights.ExtraBold;
             }
+
             if (string.Equals(fontWeight, "lighter", StringComparison.OrdinalIgnoreCase))
             {
-                SvgTransformableElement parentElement = element.ParentNode as SvgTransformableElement;
+                var parentElement = element.ParentNode as SvgTransformableElement;
                 if (parentElement != null)
                 {
                     fontWeight = parentElement.GetPropertyValue("font-weight");
-                    if (!string.IsNullOrWhiteSpace(fontWeight))
-                    {
-                        return this.GetLighterFontWeight(fontWeight);
-                    }
+                    if (!string.IsNullOrWhiteSpace(fontWeight)) return GetLighterFontWeight(fontWeight);
                 }
+
                 return GdiFontWeights.Light;
             }
 
@@ -884,10 +835,7 @@ namespace SharpVectors.Renderers.Gdi
 
         private GdiFontWeights GetBolderFontWeight(string fontWeight)
         {
-            if (string.IsNullOrWhiteSpace(fontWeight))
-            {
-                return GdiFontWeights.Normal;
-            }
+            if (string.IsNullOrWhiteSpace(fontWeight)) return GdiFontWeights.Normal;
 
             switch (fontWeight)
             {
@@ -922,10 +870,7 @@ namespace SharpVectors.Renderers.Gdi
 
         private GdiFontWeights GetLighterFontWeight(string fontWeight)
         {
-            if (string.IsNullOrWhiteSpace(fontWeight))
-            {
-                return GdiFontWeights.Normal;
-            }
+            if (string.IsNullOrWhiteSpace(fontWeight)) return GdiFontWeights.Normal;
 
             switch (fontWeight)
             {
@@ -965,37 +910,22 @@ namespace SharpVectors.Renderers.Gdi
 
         private GdiFontStyles GetTextFontStyle(SvgTextContentElement element)
         {
-            string fontStyle = element.GetPropertyValue("font-style");
-            if (string.IsNullOrWhiteSpace(fontStyle))
-            {
-                return GdiFontStyles.Normal;
-            }
+            var fontStyle = element.GetPropertyValue("font-style");
+            if (string.IsNullOrWhiteSpace(fontStyle)) return GdiFontStyles.Normal;
 
             var comparer = StringComparison.OrdinalIgnoreCase;
 
-            if (string.Equals(fontStyle, CssConstants.ValNormal, comparer))
-            {
-                return GdiFontStyles.Normal;
-            }
-            if (string.Equals(fontStyle, "italic", comparer))
-            {
-                return GdiFontStyles.Italic;
-            }
-            if (string.Equals(fontStyle, "oblique", comparer))
-            {
-                return GdiFontStyles.Oblique;
-            }
+            if (string.Equals(fontStyle, CssConstants.ValNormal, comparer)) return GdiFontStyles.Normal;
+            if (string.Equals(fontStyle, "italic", comparer)) return GdiFontStyles.Italic;
+            if (string.Equals(fontStyle, "oblique", comparer)) return GdiFontStyles.Oblique;
 
             return GdiFontStyles.Normal;
         }
 
         private GdiFontStretches GetTextFontStretch(SvgTextContentElement element)
         {
-            string fontStretch = element.GetPropertyValue("font-stretch");
-            if (string.IsNullOrWhiteSpace(fontStretch))
-            {
-                return GdiFontStretches.Normal;
-            }
+            var fontStretch = element.GetPropertyValue("font-stretch");
+            if (string.IsNullOrWhiteSpace(fontStretch)) return GdiFontStretches.Normal;
 
             switch (fontStretch)
             {
