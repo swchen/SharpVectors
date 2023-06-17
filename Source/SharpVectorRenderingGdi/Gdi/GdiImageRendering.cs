@@ -79,6 +79,7 @@ namespace SharpVectors.Renderers.Gdi
             float width  = (float)iElement.Width.AnimVal.Value;
 			float height = (float)iElement.Height.AnimVal.Value;
 
+            //// NOTE: 直接取 SVG 标签 x, y, width, height 然后 SetClip
             RectangleF destRect = new RectangleF((float)iElement.X.AnimVal.Value,
                 (float)iElement.Y.AnimVal.Value, (float)iElement.Width.AnimVal.Value,
                 (float)iElement.Height.AnimVal.Value);
@@ -86,7 +87,11 @@ namespace SharpVectors.Renderers.Gdi
             RectangleF srcRect;
             RectangleF clipRect = destRect;
 
-//            var container = graphics.BeginContainer();
+
+
+            //            var container = graphics.BeginContainer();
+
+            //// NOTE: graphics.SetClip 后面有 graphics.ResetClip
             graphics.SetClip(new Region(clipRect), CombineMode.Intersect);
 
             Image image = null;
