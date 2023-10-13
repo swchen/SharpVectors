@@ -164,6 +164,15 @@ namespace SharpVectors.Renderers.Wpf
                     _drawGroup.Transform = transform;
                 }
             }
+            else
+            {
+                // TODO
+                transform = this.Transform;
+                if (transform != null)
+                {
+                    _drawGroup.Transform = transform;
+                }
+            }
 
             if (!elmRect.IsEmpty && !elmRect.Width.Equals(0) && !elmRect.Height.Equals(0))
             {   
@@ -365,7 +374,7 @@ namespace SharpVectors.Renderers.Wpf
             {
                 Point ptTopLeft = bounds.TopLeft;
 
-                if (!Point.Equals(ptTopLeft, new Point(0, 0)))
+                if (Math.Round(ptTopLeft.X, 4) < 0 || Math.Round(ptTopLeft.Y, 4) < 0)
                 {
                     TranslateTransform translate = new TranslateTransform(-ptTopLeft.X, -ptTopLeft.Y);
 
@@ -382,7 +391,15 @@ namespace SharpVectors.Renderers.Wpf
                     {
                         // The translation should not resize the drawing, if it does, reset it
                         var bounds1 = _drawGroup.Bounds;
-                        _drawGroup.Transform = translate;
+                        if (_drawGroup.ClipGeometry != null)
+                        {
+                            _drawGroup.ClipGeometry = null;
+                            _drawGroup.Transform = translate;
+                        }
+                        else
+                        {
+                            _drawGroup.Transform = translate;
+                        }
                         var bounds2 = _drawGroup.Bounds;
 
                         // Issue #157: Stroke-width and BoundingBox 

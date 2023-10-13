@@ -22,11 +22,11 @@ using SharpVectors.Runtime;
 using SharpVectors.Renderers.Wpf;
 using SharpVectors.Converters.Utils;
 
-using DpiScale = SharpVectors.Runtime.DpiScale;
-using DpiUtilities = SharpVectors.Runtime.DpiUtilities;
-
 namespace SharpVectors.Converters
 {
+    using DpiScale = SharpVectors.Runtime.DpiScale;
+    using DpiUtilities = SharpVectors.Runtime.DpiUtilities;
+
     /// <summary>
     /// This is a <see cref="Canvas"/> control for viewing <c>SVG</c> file in <c>WPF</c> applications.
     /// </summary>
@@ -925,6 +925,11 @@ namespace SharpVectors.Converters
         /// </returns>
         public Task<bool> LoadAsync(Uri uriSource)
         {
+            if (_dpiScale == null)
+            {
+                _dpiScale = DpiUtilities.GetWindowScale(this);
+            }
+
             TaskCompletionSource<bool> result = new TaskCompletionSource<bool>();
 
             if (uriSource == null)
@@ -988,6 +993,11 @@ namespace SharpVectors.Converters
         /// </returns>
         public Task<bool> LoadAsync(string svgSource)
         {
+            if (_dpiScale == null)
+            {
+                _dpiScale = DpiUtilities.GetWindowScale(this);
+            }
+
             TaskCompletionSource<bool> result = new TaskCompletionSource<bool>();
 
             if (string.IsNullOrWhiteSpace(svgSource))
@@ -1061,6 +1071,11 @@ namespace SharpVectors.Converters
         /// </remarks>
         public Task<bool> LoadAsync(Stream streamSource, bool useCopyStream = true)
         {
+            if (_dpiScale == null)
+            {
+                _dpiScale = DpiUtilities.GetWindowScale(this);
+            }
+
             TaskCompletionSource<bool> result = new TaskCompletionSource<bool>();
 
             if (streamSource == null)
